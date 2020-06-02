@@ -180,6 +180,7 @@ typedef struct _NSNotificationQueueList
 
 /*
  * Queue functions
+ * 双向链表的实现
  *
  *  Queue             Elem              Elem              Elem
  *    head ---------> next -----------> next -----------> next --> nil
@@ -258,12 +259,20 @@ add_to_queue(NSNotificationQueueList *queue, NSNotification *notification,
 /*
  * NSNotificationQueue class implementation
  */
-
+#pragma mark - NSNotificationQueue小结
+/**
+ 1. 依赖runloop，所以如果在其它子线程使用NSNotificationQueue，需要开启runloop。
+ 2. 最终还是通过NSNotificationCenter进行发送通知，所以这个角度讲它还是同步的。
+ 3. 所以异步，指的是非实时发送而是在合适的时机发送，并没有开启异步线程。
+ */
 @interface NSNotificationQueue (Private)
 - (NSNotificationCenter*) _center;
 @end
 
 /**
+ * 该类支持异步发送 向队列添加通知的方法立即返回。
+ * 队列将定期把最旧的通知发送到通知中心。
+ * 在多线程上，通知总是在它们发布的线程上发送。
  * This class supports asynchronous posting of [NSNotification]s to an
  * [NSNotificationCenter].  The method to add a notification to the queue
  * returns immediately.  The queue will periodically post its oldest
@@ -285,6 +294,7 @@ static NSArray	*defaultMode = nil;
 }
 
 /**
+ * 返回此线程中使用的默认通知队列，它总是将通知发送到默认的通知中心（对于整个任务，它可能有多个线程，因此有多个通知队列）
  * Returns the default notification queue for use in this thread.  It will
  * always post notifications to the default notification center (for the
  * entire task, which may have multiple threads and therefore multiple
@@ -375,7 +385,11 @@ static NSArray	*defaultMode = nil;
   RELEASE(_center);
   [super dealloc];
 }
-
+#pragma mark - 入队的大致逻辑
+/**
+ 1. 根据coalesceMask参数判断是否合并通知
+ 2. 根据postingStyle参数，判断发送的时机，如果不是立即发送则把通知加入到队列中：_asapQueue、_idleQueue
+ */
 /* Inserting and Removing Notifications From a Queue */
 
 /**
@@ -482,6 +496,7 @@ static NSArray	*defaultMode = nil;
  *  <code>NSPostASAP</code> (post soon), or <code>NSPostWhenIdle</code> (post
  *  when runloop is idle).
  */
+
 - (void) enqueueNotification: (NSNotification*)notification
 		postingStyle: (NSPostingStyle)postingStyle	
 {
@@ -503,6 +518,10 @@ static NSArray	*defaultMode = nil;
  *  determines which [NSRunLoop] mode notification may be posted in (nil means
  *  NSDefaultRunLoopMode).
  */
+/**
+ 把要发送的通知添加到队列，等待发送
+ modes是RunLoop中的mode，nil表示 NSDefaultRunLoopMode
+ */
 - (void) enqueueNotification: (NSNotification*)notification
 		postingStyle: (NSPostingStyle)postingStyle
 		coalesceMask: (NSUInteger)coalesceMask
@@ -512,6 +531,7 @@ static NSArray	*defaultMode = nil;
     {
       modes = defaultMode;
     }
+    //是否需要合并通知
   if (coalesceMask != NSNotificationNoCoalescing)
     {
       [self dequeueNotificationsMatching: notification
@@ -521,6 +541,7 @@ static NSArray	*defaultMode = nil;
     {
       case NSPostNow:
 	{
+    //如果是立马发送，则调用NSNotificationCenter的postNotification方法进行发送
 	  NSString	*mode;
 
 	  mode = [[NSRunLoop currentRunLoop] currentMode];
@@ -531,10 +552,11 @@ static NSArray	*defaultMode = nil;
 	}
 	break;
 
+            //添加到_asapQueue队列，等待发送
       case NSPostASAP:
 	add_to_queue(_asapQueue, notification, modes, _zone);
 	break;
-
+            //添加到_idleQueue队列，等待发送
       case NSPostWhenIdle:
 	add_to_queue(_idleQueue, notification, modes, _zone);
 	break;
@@ -600,10 +622,12 @@ notify(NSNotificationCenter *center, NSNotificationQueueList *list,
   /* Posting a notification catches exceptions, so it's OK to use
    * retain/release of objects here as we won't get an exception
    * causing a leak.
+   * 发布一个通知会捕获异常，所以在这里使用对象的retain或者release是可以的，因为我们不会得到导致泄漏的异常。
    */
   if (len > 0)
     {
-      /* First, we make a note of each notification while removing the
+      /* 首先，我们从队列中删除相应的列表项时记录每个通知。这样当我们发布通知时，我们就不会因为另一个notifi（）试图使用相同的项而出现问题。
+       * First, we make a note of each notification while removing the
        * corresponding list item from the queue ... so that when we get
        * round to posting the notifications we will not get problems
        * with another notif() trying to use the same items.
@@ -615,7 +639,8 @@ notify(NSNotificationCenter *center, NSNotificationQueueList *list,
 	  remove_from_queue(list, item, zone);
 	}
 
-      /* Now that we no longer need to worry about r-entrancy,
+      /* 现在我们不再需要担心r-entrancy了，我们逐个检查通知，依次发布每个通知
+       * Now that we no longer need to worry about r-entrancy,
        * we step through our notifications, posting each one in turn.
        */
       for (pos = 0; pos < len; pos++)
@@ -638,6 +663,11 @@ notify(NSNotificationCenter *center, NSNotificationQueueList *list,
  *	NSRunLoop.
  */
 
+#pragma mark - 发送通知逻辑
+/**
+ 1. runloop触发某个时机，调用GSPrivateNotifyASAP和GSPrivateNotifyIdle方法。这两个方法最终都调用了notify()方法。
+ 2. notify()方法做的事情就是调用NSNotificationCenter的postNotification：进行发送通知
+ */
 void
 GSPrivateNotifyASAP(NSString *mode)
 {

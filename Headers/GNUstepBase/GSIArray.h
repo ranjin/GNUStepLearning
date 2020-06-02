@@ -537,6 +537,7 @@ GSIArrayClear(GSIArray array)
   if (array->ptr)
     {
       /*
+       * 只有在动态初始化时才释放内存
        * Only free memory if it was dynamically initialised (old > 0)
        */
       if (array->old > 0)

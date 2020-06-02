@@ -69,18 +69,20 @@ extern "C" {
 {
   NSPostWhenIdle,	// post when runloop is idle
   NSPostASAP,		// post soon
-  NSPostNow		// post synchronously
+  NSPostNow		    // post synchronously
 }
  </example>
  */
+//队列的发送时机
 enum {
-  NSPostWhenIdle = 1,
-  NSPostASAP = 2,
-  NSPostNow = 3
+  NSPostWhenIdle = 1,   //当runloop空闲时发送
+  NSPostASAP = 2,       //尽快发送
+  NSPostNow = 3         //同步发送
 };
 typedef NSUInteger NSPostingStyle;
 
 /**
+ * 合并通知的几种枚举类型
  * Enumeration of possible ways to combine notifications when dealing with
  * [NSNotificationQueue]:
  <example>
@@ -91,10 +93,11 @@ typedef NSUInteger NSPostingStyle;
 }
  </example>
  */
+//队列的合并策略
 enum {
-  NSNotificationNoCoalescing = 0,
-  NSNotificationCoalescingOnName = 1,
-  NSNotificationCoalescingOnSender = 2
+  NSNotificationNoCoalescing = 0,       //不合并
+  NSNotificationCoalescingOnName = 1,   //合并名称相同的
+  NSNotificationCoalescingOnSender = 2  //合并对象相同的
 };
 typedef NSUInteger NSNotificationCoalescing;
 
@@ -107,6 +110,14 @@ typedef NSUInteger NSNotificationCoalescing;
  */
 struct _NSNotificationQueueList;
 
+/**
+ 通知队列，用于异步发送消息，这个异步并不是开启线程，而是把通知存到双向链表实现的队列里面，等待某个时机
+ 
+ 另外NSNotificationQueue是依赖runloop的，如果线程的runloop未开启则无效。
+ NSNotificationQueue主要做了两件事：
+ 1. 添加通知到队列
+ 2. 删除通知
+ */
 @interface NSNotificationQueue : NSObject
 {
 #if	GS_EXPOSE(NSNotificationQueue)
@@ -118,15 +129,18 @@ struct _NSNotificationQueueList;
 #endif
 }
 
+// 创建通知队列
 /* Creating Notification Queues */
 
 + (NSNotificationQueue*) defaultQueue;
 - (id) initWithNotificationCenter: (NSNotificationCenter*)notificationCenter;
 
+// 从队列里面插入或者移除通知 dequeue：删除  enqueue：添加
 /* Inserting and Removing Notifications From a Queue */
 
 - (void) dequeueNotificationsMatching: (NSNotification*)notification
 			 coalesceMask: (NSUInteger)coalesceMask;
+
 
 - (void) enqueueNotification: (NSNotification*)notification
 	        postingStyle: (NSPostingStyle)postingStyle;

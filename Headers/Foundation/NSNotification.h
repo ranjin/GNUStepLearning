@@ -46,6 +46,11 @@ extern "C" {
 @interface NSNotification : NSObject <NSCopying, NSCoding>
 
 /* Creating a Notification Object */
+/**
+ name：      通知的name
+ object：    携带的对象
+ userInfo：  配置信息
+ */
 + (NSNotification*) notificationWithName: (NSString*)name
 				  object: (id)object;
 

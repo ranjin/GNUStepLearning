@@ -29,6 +29,13 @@
    $Date$ $Revision$
 */
 
+/**
+ 单例类，负责管理通知的创建和发送。主要负责三件事：
+ 1. 添加通知
+ 2. 发送通知
+ 3. 移除通知
+ */
+
 #import "common.h"
 #define	EXPOSE_NSNotificationCenter_IVARS	1
 #import "Foundation/NSNotification.h"
@@ -148,9 +155,13 @@ struct	NCTbl;		/* Notification Center Table structure	*/
  * trivial class instead ... and gets managed by the garbage collector.
  */
 
+//Observation 存储观察者和响应结构体，基本的存储单元。
 typedef	struct	Obs {
+    //观察者，接受通知的对象
   id		observer;	/* Object to receive message.	*/
+    //响应方法
   SEL		selector;	/* Method selector.		*/
+    //链表中指向的下一个元素
   struct Obs	*next;		/* Next item in linked list.	*/
   int		retained;	/* Retain count for structure.	*/
   struct NCTbl	*link;		/* Pointer back to chunk table	*/
@@ -223,6 +234,16 @@ static void obsFree(Observation *o);
 
 #include "GNUstepBase/GSIMap.h"
 
+/**
+ NC表用来跟踪分配给存储观察结构体的内存。
+ 当一个观察从通知中心移除时，它的内存返回到chunk表的空闲表。而不是释放到一般的内存分配系统。
+ 这意味着，一旦注册了大量的观察者，即使删除了观察者，内存使用也不会减少。另一方面，增加和删除观察者的进程加快了。
+ 
+ 作为对性能的一个小帮助，还维护了用于将通知对象映射到观察列表的映射表的缓存。
+ 这使我们避免了在频繁添加和删除通知观察者时创建和销毁映射表的开销。
+ 
+ 性能并不是使用这个结构的真正原因，它提供了一种简洁的方式来确保观察结构所指向的观察者不会被GC机制视为正在使用的。
+ */
 /*
  * An NC table is used to keep track of memory allocated to store
  * Observation structures. When an Observation is removed from the
@@ -247,8 +268,13 @@ static void obsFree(Observation *o);
 #define	CHUNKSIZE	128
 #define	CACHESIZE	16
 typedef struct NCTbl {
+    //wildcard：链表结构，保存既没有name也没有object的通知
   Observation		*wildcard;	/* Get ALL messages.		*/
+    
+    //存储没有name但是有object的通知
   GSIMapTable		nameless;	/* Get messages for any name.	*/
+    
+    //存储带有name的通知，不管有没有object
   GSIMapTable		named;		/* Getting named messages only.	*/
   unsigned		lockCount;	/* Count recursive operations.	*/
   NSRecursiveLock	*_lock;		/* Lock out other threads.	*/
@@ -599,6 +625,7 @@ purgeMapNode(GSIMapTable map, GSIMapNode node, id observer)
 
 @end
 
+//作用是代理观察者，主要用来实现接口：
 @interface GSNotificationObserver : NSObject
 {
 	NSOperationQueue *_queue;
@@ -628,6 +655,7 @@ purgeMapNode(GSIMapTable map, GSIMapNode node, id observer)
 	[super dealloc];
 }
 
+//响应接受通知的方法，并在指定队列中执行block。
 - (void) didReceiveNotification: (NSNotification *)notif
 {
 	if (_queue != nil)
@@ -770,6 +798,7 @@ static NSNotificationCenter *default_center = nil;
  * removing an observer will remove <em>all</em> of the multiple registrations.
  * </p>
  */
+//添加观察者
 - (void) addObserver: (id)observer
 	    selector: (SEL)selector
                 name: (NSString*)name
@@ -780,6 +809,7 @@ static NSNotificationCenter *default_center = nil;
   GSIMapTable	m;
   GSIMapNode	n;
 
+    //前置条件判断
   if (observer == nil)
     [NSException raise: NSInvalidArgumentException
 		format: @"Nil observer passed to addObserver ..."];
@@ -796,8 +826,10 @@ static NSNotificationCenter *default_center = nil;
         observer, NSStringFromSelector(selector)];
     }
 
+    //锁住
   lockNCTable(TABLE);
 
+    //创建一个observation对象，持有观察者和SEL，下面进行的所有逻辑就是为了存储它。
   o = obsNew(TABLE, selector, observer);
 
   /*
@@ -812,17 +844,26 @@ static NSNotificationCenter *default_center = nil;
      将观察结果记录在一个链表中。
      注意：我们可以为一个通知注册多个观察者，这种情况下，发送通知时观察者将收到多个消息。
      */
+    /**
+     总结：
+     1. 如果通知的name存在，则以name为key，在named字典里取出值n（也是个字典）。
+     2. 然后以object（方法参数）为key，从字典n里面取出对应的值，这个值就是Observation类型的b链表，然后把刚开始创建的obs对象o存储进去。
+     */
+#pragma mark -- name不为空，object不确定
+
   if (name)
     {
       /*
        * 定位此名称的映射表，如果不存在则创建它
        * Locate the map table for this name - create it if not present.
        */
+        //NAMED是个宏，表示名为named字典。以name为key，从named表中获取对应的mapTable
       n = GSIMapNodeForKey(NAMED, (GSIMapKey)(id)name);
-      if (n == 0)
+      if (n == 0)   //不存在，则创建
 	{
-	  m = mapNew(TABLE);
+	  m = mapNew(TABLE);    //先取缓存，如果缓存没有则新建一个map
 	  /*
+       * 因为这是对给定名称的第一次观察，所以我们获取名称的一个副本，这样在映射中它就不会发生变化。
 	   * As this is the first observation for the given name, we take a
 	   * copy of the name so it cannot be mutated while in the map.
 	   */
@@ -831,11 +872,12 @@ static NSNotificationCenter *default_center = nil;
 	  GS_CONSUMED(name)
 	}
       else
-	{
+	{   //存在则把值取出来，赋值给m
 	  m = (GSIMapTable)n->value.ptr;
 	}
 
       /*
+       * 将观察结果添加到正确对象的列表中
        * Add the observation to the list for the correct object.
        */
       n = GSIMapNodeForSimpleKey(m, (GSIMapKey)object);
@@ -851,22 +893,39 @@ static NSNotificationCenter *default_center = nil;
 	  list->next = o;
 	}
     }
+#pragma mark -- name为空，object不为空
+    //如果name为空，object不为空
+    /**
+     总结：
+     1. 以object为key，从nameless字典中取出value，此value是个obs类型的链表
+     2. 把创建的obs类型的对象o存储到链表中
+     只存在object时存储只有一层，那就是object和obs对象之间的映射
+     */
   else if (object)
     {
+    
+      //以object为key，从nameless字典中取出对应的value，value是个链表结构
       n = GSIMapNodeForSimpleKey(NAMELESS, (GSIMapKey)object);
       if (n == 0)
+          //不存在则新建链表，并存到map中
 	{
 	  o->next = ENDOBS;
 	  GSIMapAddPair(NAMELESS, (GSIMapKey)object, (GSIMapVal)o);
 	}
       else
 	{
+        //存在，则把值接到链表的节点上
 	  list = (Observation*)n->value.ptr;
 	  o->next = list->next;
 	  list->next = o;
 	}
     }
+    /**
+     没有name和object的情况：直接把obs对象存放在了wildcard链表结构中
+     */
+#pragma mark -- name与object都为空
   else
+      //name和object都为空，则存储到wildcard链表中
     {
       o->next = WILDCARD;
       WILDCARD = o;
@@ -876,6 +935,7 @@ static NSNotificationCenter *default_center = nil;
 }
 
 /**
+ * 返回一个添加到通知中心的观察者。
  * <p>Returns a new observer added to the notification center, in order to 
  * observe the given notification name posted by an object or any object (if 
  * the object argument is nil).</p>
@@ -883,16 +943,27 @@ static NSNotificationCenter *default_center = nil;
  * <p>For the name and object arguments, the constraints and behavior described 
  * in -addObserver:name:selector:object: remain valid.</p>
  *
+ * 对于在消息中心收到的每个通知，观察者都将执行通知块，如果队列不为nil，则通知块被包在NSOperation中并在队列中调度，否则这个块会在发布线程中立即执行。
  * <p>For each notification received by the center, the observer will execute 
  * the notification block. If the queue is not nil, the notification block is 
  * wrapped in a NSOperation and scheduled in the queue, otherwise the block is 
  * executed immediately in the posting thread.</p>
  */
+// 这个方法是GSNotificationObserver实现的接口
+// 这里如何实现指定队列回调block的?
 - (id) addObserverForName: (NSString *)name 
                    object: (id)object 
                     queue: (NSOperationQueue *)queue 
                usingBlock: (GSNotificationBlock)block
 {
+    /**
+     相比addObserver多了一层代理观察者GSNotificationObserver。
+     基本流程为：
+     1. 创建了一个GSNotificationObserver类型的对象observer，并把queue和block保存下来
+     2. 调用接口1进行通知的注册
+     3. 接收到通知时会响应didReceiveNotification回调方法，在回调方法里把block抛给指定的queue去执行
+     */
+    //GSNotificationObserver保存了queue和block信息，并且作为观察者注册到通知中心，
 	GSNotificationObserver *observer = 
 		[[GSNotificationObserver alloc] initWithQueue: queue block: block];
 
@@ -938,6 +1009,7 @@ static NSNotificationCenter *default_center = nil;
       GSIMapNode		n0;
 
       /*
+       * 首先尝试删除此对象的所有命名集合
        * First try removing all named items set for this object.
        */
       e0 = GSIMapEnumeratorForMap(NAMED);
@@ -954,6 +1026,7 @@ static NSNotificationCenter *default_center = nil;
 	      GSIMapNode		n1 = GSIMapEnumeratorNextNode(&e1);
 
 	      /*
+           * object和name都为空，遍历当前名称下的键入的所有
 	       * Nil object and nil name, so we step through all the maps
 	       * keyed under the current name and remove all the objects
 	       * that match the observer.
@@ -971,6 +1044,7 @@ static NSNotificationCenter *default_center = nil;
 	      GSIMapNode	n1;
 
 	      /*
+           * name为空，object不为空
 	       * Nil name, but non-nil object - we locate the map for the
 	       * specified object, and remove all the items that match
 	       * the observer.
@@ -1077,10 +1151,12 @@ static NSNotificationCenter *default_center = nil;
 
 
 /**
+ * 执行发送通知的私有方法，在通知返回时或者返回之前会释放掉，来避免内存溢出。
  * Private method to perform the actual posting of a notification.
  * Release the notification before returning, or before we raise
  * any exception ... to avoid leaks.
  */
+#pragma mark - 发送通知的核心函数，主要做了三件事：查找通知、发送、释放资源
 - (void) _postAndRelease: (NSNotification*)notification
 {
   Observation	*o;
@@ -1092,6 +1168,7 @@ static NSNotificationCenter *default_center = nil;
   GSIArrayItem	i[64];
   GSIArray_t	b;
   GSIArray	a = &b;
+    //step1：从named、nameless、wildcard表中查找对应的通知
 
   if (name == nil)
     {
@@ -1102,6 +1179,7 @@ static NSNotificationCenter *default_center = nil;
   object = [notification object];
 
   /*
+   * 当我们遍历这个观察表时，我们会先锁定这张表。当观察者被垃圾回收时，对象的弱指针被归零。因此为了避免一致性问题，我们在复制所有感兴趣的观察对象时禁用GC。如果在栈上有超过64个观察者的情况下，我们在数组中使用扫描内存。
    * Lock the table of observations while we traverse it.
    *
    * The table of observations contains weak pointers which are zeroed when
@@ -1114,6 +1192,7 @@ static NSNotificationCenter *default_center = nil;
   lockNCTable(TABLE);
 
   /*
+   * 查找既没有指定名称也没有指定对象的所有观察者。
    * Find all the observers that specified neither NAME nor OBJECT.
    */
   for (o = WILDCARD = purgeCollected(WILDCARD); o != ENDOBS; o = o->next)
@@ -1122,6 +1201,7 @@ static NSNotificationCenter *default_center = nil;
     }
 
   /*
+   * 查找指定对象但是没有指定名称的观察者。
    * Find the observers that specified OBJECT, but didn't specify NAME.
    */
   if (object)
@@ -1139,6 +1219,7 @@ static NSNotificationCenter *default_center = nil;
     }
 
   /*
+   * 找到NAME的观察者，除了那些带有不匹配通知对象的非nil对象的观察者。
    * Find the observers of NAME, except those observers with a non-nil OBJECT
    * that doesn't match the notification's OBJECT).
    */
@@ -1193,6 +1274,7 @@ static NSNotificationCenter *default_center = nil;
   unlockNCTable(TABLE);
 
   /*
+   * 这里发送所有的通知，即调用performSelector执行相应方法，从这里可以看出是同步的。
    * Now send all the notifications.
    */
   count = GSIArrayCount(a);
@@ -1213,10 +1295,14 @@ static NSNotificationCenter *default_center = nil;
           NS_ENDHANDLER
 	}
     }
+    /**
+     对NSTable上锁，然后移除数组上的所有元素并清除这个数组,最后解锁。
+     */
   lockNCTable(TABLE);
   GSIArrayEmpty(a);
   unlockNCTable(TABLE);
 
+    //释放资源
   RELEASE(notification);
 }
 
@@ -1249,9 +1335,18 @@ static NSNotificationCenter *default_center = nil;
 /**
  * The preferred method for posting a notification.
  * <br />
+ * 由于性能原因，不会在发送给观察者的每条消息中都包装一个异常处理程序。
+ * 如果一个观察者抛出异常，列表中随后的观察者都不会收到通知。
  * For performance reasons, we don't wrap an exception handler round every
  * message sent to an observer.  This means that, if one observer raises
  * an exception, later observers in the lists will not get the notification.
+ */
+#pragma mark - 发送过程
+/**
+ 从三个存储容器中：named、nameless、wildcard去查找对应的obs对象，然后通过performSelector：逐一调用响应方法，这就完成了发送流程。
+ 核心点：
+ 1. 同步发送
+ 2. 遍历所有列表：即注册多次通知就会响应多次
  */
 - (void) postNotificationName: (NSString*)name
 		       object: (id)object
@@ -1263,6 +1358,8 @@ static NSNotificationCenter *default_center = nil;
   notification->_name = [name copyWithZone: [self zone]];
   notification->_object = [object retain];
   notification->_info = [info retain];
+    
+    //进行发送操作
   [self _postAndRelease: notification];
 }
 
