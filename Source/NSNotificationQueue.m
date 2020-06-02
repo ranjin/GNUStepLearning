@@ -263,7 +263,7 @@ add_to_queue(NSNotificationQueueList *queue, NSNotification *notification,
 /**
  1. 依赖runloop，所以如果在其它子线程使用NSNotificationQueue，需要开启runloop。
  2. 最终还是通过NSNotificationCenter进行发送通知，所以这个角度讲它还是同步的。
- 3. 所以异步，指的是非实时发送而是在合适的时机发送，并没有开启异步线程。
+ 3. 异步，指的是非实时发送而是在合适的时机发送，并没有开启异步线程。
  */
 @interface NSNotificationQueue (Private)
 - (NSNotificationCenter*) _center;

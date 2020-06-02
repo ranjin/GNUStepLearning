@@ -788,7 +788,8 @@ static NSNotificationCenter *default_center = nil;
  * <p>The notification center does not retain observer or object. Therefore,
  * you should always send removeObserver: or removeObserver:name:object: to
  * the notification center before releasing these objects.<br />
- * 为了方便起见，系统自己建立了垃圾回收机制，所以我们自己不需要手动去移除任何观察者。
+ * 通知中心不会保留观察者或对象。因此在释放这些对象之前，应该始终将removeObserve发送到通知中心。
+ * 为了方便起见，在使用GC时，不需要删除任何GC的观察者，因为系统将隐式的删除它。
  * As a convenience, when built with garbage collection, you do not need to
  * remove any garbage collected observer as the system will do it implicitly.
  * </p>
@@ -976,6 +977,7 @@ static NSNotificationCenter *default_center = nil;
 }
 
 /**
+ * 如果观察者为nil，其效果是删除指定通知的所有注册表，除非观察者和名称都为nil，在这种情况下不执行任何操作。
  * Deregisters observer for notifications matching name and/or object.  If
  * either or both is nil, they act like wildcards.  The observer may still
  * remain registered for other notifications; use -removeObserver: to remove
