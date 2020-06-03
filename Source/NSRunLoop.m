@@ -83,6 +83,7 @@ static NSDate	*theFuture = nil;
 
 
 /*
+ *  GSRunLoopPerformer类用于保存有关消息的信息，这些消息将在每次runloop迭代通过后发送给对象。
  *	The GSRunLoopPerformer class is used to hold information about
  *	messages which are due to be sent to objects once each runloop
  *	iteration has passed.
@@ -163,6 +164,7 @@ static NSDate	*theFuture = nil;
 @end
 
 /*
+ * GSTimedPerformer类用于保存有关消息的信息，这些信息将在特定时间发送给对象。
  * The GSTimedPerformer class is used to hold information about
  * messages which are due to be sent to objects at a particular time.
  */
@@ -269,6 +271,7 @@ static inline BOOL timerInvalidated(NSTimer *t)
 @implementation NSObject (TimedPerformers)
 
 /*
+ * 下面的方法取消在当前循环中为指定目标设置的任何执行操作
  * Cancels any perform operations set up for the specified target
  * in the current run loop.
  */
@@ -298,6 +301,7 @@ static inline BOOL timerInvalidated(NSTimer *t)
 }
 
 /*
+ * 也是取消在当前循环中为指定目标设置的某些操作，需要aSelector与arg匹配
  * Cancels any perform operations set up for the specified target
  * in the current loop, but only if the value of aSelector and argument
  * with which the performs were set up match those supplied.<br />
@@ -428,7 +432,9 @@ static inline BOOL timerInvalidated(NSTimer *t)
 
 @implementation NSRunLoop (Private)
 
-/* Add a watcher to the list for the specified mode.  Keep the list in
+/*
+ * 将watcher添加到指定模式的列表中
+ Add a watcher to the list for the specified mode.  Keep the list in
    limit-date order. */
 - (void) _addWatcher: (GSRunLoopWatcher*) item forMode: (NSString*)mode
 {
@@ -474,7 +480,8 @@ static inline BOOL timerInvalidated(NSTimer *t)
 
           found = YES;
 
-	  /* We have to remove the performers before firing, so we copy
+	  /* 我们必须在firing之前移除performers，因此我们得复制指针而不释放对象，然后将performers设置为空，数组中复制的对象将在以后释放。
+       * We have to remove the performers before firing, so we copy
 	   * the pointers without releasing the objects, and then set
 	   * the performers to be empty.  The copied objects in 'array'
 	   * will be released later.
@@ -485,7 +492,9 @@ static inline BOOL timerInvalidated(NSTimer *t)
 	    }
           performers->count = 0;
 
-	  /* Remove the requests that we are about to fire from all modes.
+	  /*
+       在所有模式中删除将要触发的请求
+       Remove the requests that we are about to fire from all modes.
 	   */
           original = context;
 	  enumerator = NSEnumerateMapTable(_contextMap);
@@ -514,6 +523,7 @@ static inline BOOL timerInvalidated(NSTimer *t)
 	  NSEndMapTableEnumeration(&enumerator);
 
 	  /* Finally, fire the requests ands release them.
+       * 最后触发请求并释放它们
 	   */
 	  for (i = 0; i < count; i++)
 	    {
@@ -528,6 +538,8 @@ static inline BOOL timerInvalidated(NSTimer *t)
 }
 
 /**
+ * 查找与此runloop中指定的数据和类型匹配的runloop监视器
+ * 如果mode为nil，则使用currentMode(如果runloop正运行着)或NSDefaultRunLoopMode模式
  * Locates a runloop watcher matching the specified data and type in this
  * runloop.  If the mode is nil, either the currentMode is used (if the
  * loop is running) or NSDefaultRunLoopMode is used.
@@ -585,6 +597,7 @@ static inline BOOL timerInvalidated(NSTimer *t)
 }
 
 /**
+ * 移除监视器,跟_getWatcher同理。
  * Removes a runloop watcher matching the specified data and type in this
  * runloop.  If the mode is nil, either the currentMode is used (if the
  * loop is running) or NSDefaultRunLoopMode is used.
@@ -707,6 +720,8 @@ static inline BOOL timerInvalidated(NSTimer *t)
 @end
 
 /**
+ *  runloop实例处理各种必须在应用程序中重复执行的实用程序任务，例如处理输入事件，监听分布式对象通信、触发NSTimer以及异步发送通知和其它消息.
+ *
  *  <p><code>NSRunLoop</code> instances handle various utility tasks that must
  *  be performed repetitively in an application, such as processing input
  *  events, listening for distributed objects communications, firing
@@ -744,7 +759,9 @@ static inline BOOL timerInvalidated(NSTimer *t)
   if (nil == current)
     {
       current = info->loop = [[self alloc] _init];
-      /* If this is the main thread, set up a housekeeping timer.
+      /*
+       如果是主线程，设置一个管理计时器
+       If this is the main thread, set up a housekeeping timer.
        */
       if (nil != current && [GSCurrentThread() isMainThread] == YES)
         {
@@ -829,6 +846,7 @@ static inline BOOL timerInvalidated(NSTimer *t)
 }
 
 /**
+ * 返回runloop的当前模式，如果runloop没有运行起来，方法返回nil
  * Returns the current mode of this runloop.  If the runloop is not running
  * then this method returns nil.
  */
@@ -839,6 +857,8 @@ static inline BOOL timerInvalidated(NSTimer *t)
 
 
 /**
+ * 在指定模式的runloop中添加计时器
+ * 当计时器无效时将自动删除计时器
  * Adds a timer to the loop in the specified mode.<br />
  * Timers are removed automatically when they are invalid.<br />
  */
@@ -883,6 +903,7 @@ static inline BOOL timerInvalidated(NSTimer *t)
         }
     }
   /*
+   以前的版本维护的是一个有序数组，通过每次调用-limitDateForMode：时只检查前几个定时器来提高性能。问题是，一个计时器可以以多种mode添加，而对于一个重复的计时器，可能意味着在一种mode中可以调整其日期，而不改变计时器在其它mode中的顺序。当数组中的计时器顺序被打破时，我们可能在处理超时时会有延迟。所以恢复成在无序数组中只保留计时器，并在每次检查它们时调用-limitDateForMode：。
    * NB. A previous version of the timer code maintained an ordered
    * array on the theory that we could improve performance by only
    * checking the first few timers (up to the first one whose fire

@@ -35,6 +35,7 @@ extern "C" {
 @class NSTimer, NSDate, NSPort;
 
 /**
+ * 运行循环模式，用来处理非NSConnections或对话窗口的输入源
  * Run loop mode used to deal with input sources other than NSConnections or
  * dialog windows.  Most commonly used. Defined in
  * <code>Foundation/NSRunLoop.h</code>.
@@ -78,9 +79,13 @@ GS_EXPORT NSString * const NSDefaultRunLoopMode;
 - (void) run;
 
 /**
+ * 调用-limitDataForMode:确定是否在指定的日期之间发生超时，然后调用acceptInputForMode:beforeDate:运行循环一次
  * Calls -limitDateForMode: to determine if a timeout occurs before the
  * specified date, then calls -acceptInputForMode:beforeDate: to run the
  * loop once.<br />
+ *
+ * 指定的时间可以为nil，在这种情况下，循环会一直运行到第一个输入事件或者超时的限制日期。
+ * 如果指定的日期是在过去，只会运行一次循环来处理任何已经可用的事件。如果在模式中没有输入源或计时器，该方法在不运行循环的情况下返回NO(与提供的date参数无关)，否则返回YES。
  * The specified date may be nil ... in which case the loop runs
  * until the limit date of the first input or timeout.<br />
  * If the specified date is in the past, this runs the loop once only,
@@ -120,16 +125,32 @@ GS_EXPORT NSString * const NSDefaultRunLoopMode;
 
 @end
 
-/** This type specifies the kinds of event which may be 'watched' in a
+/**
+ * RunLoopEventType指定在runloop中可以监视的事件类型
+ * This type specifies the kinds of event which may be 'watched' in a
  * run loop.
  */
 typedef	enum {
-#ifdef __MINGW__
+#ifdef __MINGW__    //Minimalist GNU For Windows 一些头文件和端口库的集合
+    /**
+     1. 监听IO事件
+     2. 监听到达端口的消息
+     3. 消息窗口
+     4. 当运行循环时立即触发
+     */
     ET_HANDLE,	/* Watch for an I/O event on a handle.		*/
     ET_RPORT,	/* Watch for message arriving on port.		*/
     ET_WINMSG,	/* Watch for a message on a window handle.	*/
     ET_TRIGGER	/* Trigger immediately when the loop runs.	*/
 #else
+    
+    /**
+     1. 观察描述符是否变得可读
+     2. 观察描述符是否变得可写
+     3. 监听到达端口的消息
+     4. 观察带外数据的描述符
+     5. 当运行循环时立即触发
+     */
     ET_RDESC,	/* Watch for descriptor becoming readable.	*/
     ET_WDESC,	/* Watch for descriptor becoming writeable.	*/
     ET_RPORT,	/* Watch for message arriving on port.		*/
@@ -138,15 +159,25 @@ typedef	enum {
 #endif
 } RunLoopEventType;
 
-/** This protocol defines the mandatory interface a run loop watcher must
+#pragma mark - RunLoopEvents协议
+/**
+ * 这个协议定义了一个运行时循环观察者必须提供的强制性接口，以便在它所监视的循环中发生事件时通知它。
+ * This protocol defines the mandatory interface a run loop watcher must
  * provide in order for it to be notified of events occurring in the loop
  * it is watching.<br />
+ *
+ * 可选方法被记录在NSObject(RunLoopEvents)的类别。
  * Optional methods are documented in the NSObject(RunLoopEvents)
  * category.
  */
 @protocol RunLoopEvents
-/** This is the message sent back to a watcher when an event is observed
+/**
+ *
+ * 当运行循环观察到一个事件时，这是发送回观察者的消息
+ * This is the message sent back to a watcher when an event is observed
  * by the run loop.<br />
+ *
+ *
  * The 'data', 'type' and 'mode' arguments are the same as the arguments
  * passed to the -addEvent:type:watcher:forMode: method.<br />
  * The 'extra' argument varies.  For an ET_TRIGGER event, it is the same
@@ -162,10 +193,14 @@ typedef	enum {
 	       forMode: (NSString*)mode;
 @end
 
-/** This informal protocol defiens optional methods of the run loop watcher.
+/**
+ 这个非正式的协议定义了runloop观察者的可选方法
+ This informal protocol defiens optional methods of the run loop watcher.
  */
 @interface NSObject (RunLoopEvents)
-/** Called by the run loop to find out whether it needs to block to wait
+/**
+ * 由运行循环调用，以确定是否需要阻塞以等待此监视程序的事件。shouldTrigger标记用来通知runloop是否需要立即触发观察者接收到的事件。
+ * Called by the run loop to find out whether it needs to block to wait
  * for events for this watcher.  The shouldTrigger flag is used to inform
  * the run loop if tit should immediately trigger a received event for the
  * watcher.
@@ -174,6 +209,9 @@ typedef	enum {
 @end
 
 /**
+ * runloop的API最开始是用来执行两个任务：
+ * 1. 提供最高效的API来继承unix网络代码进入runloop
+ * 2. 提供一个标准机制来允许开发者在新的I/O机制中做贡献
  * The run loop watcher API was originally intended to perform two
  * tasks ...
  * 1. provide the most efficient API reasonably possible to integrate
@@ -184,7 +222,11 @@ typedef	enum {
  * for the win32 API).
  */
 @interface NSRunLoop(GNUstepExtensions)
-/** Adds a watcher to the receiver ... the watcher is used to monitor events
+/**
+ * 向receiver添加一个观察者，观察者用于监视与事件句柄数据相关联的指定类型的事件，
+ * 它以指定的runloop模式运行。
+ * 在相应的removeEvent方法被调用之前，监视程序保持不变。
+ * Adds a watcher to the receiver ... the watcher is used to monitor events
  * of the specified type which are associted with the event handle data and
  * it operates in the specified run loop modes.<br />
  * The watcher remains in place until a corresponding call to
@@ -194,7 +236,11 @@ typedef	enum {
 	     type: (RunLoopEventType)type
 	  watcher: (id<RunLoopEvents>)watcher
 	  forMode: (NSString*)mode;
-/** Removes a watcher from the receiver ... the watcher must have been 
+/**
+ * 从receiver里移除一个观察者，这个观察者必须是之前通过addEvent方法添加的。
+ * 如果不是removeAll，那么在这种情况下，它将删除添加与其它参数匹配的所有监视程序。
+ * 
+ * Removes a watcher from the receiver ... the watcher must have been
  * previously added using -addEvent:type:watcher:forMode:<br />
  * This method mirrors exactly one addition of a watcher unless removeAll
  * is YES, in which case it removes all additions of watchers matching the
