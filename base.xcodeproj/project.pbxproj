@@ -340,6 +340,7 @@
 		18EA6761172EC6170026AC34 /* GSTypeEncoding.c in Sources */ = {isa = PBXBuildFile; fileRef = 18EA675F172EC6170026AC34 /* GSTypeEncoding.c */; };
 		18EA6764172EC7F70026AC34 /* GSTypeEncoding.h in Headers */ = {isa = PBXBuildFile; fileRef = 18EA6763172EC7F70026AC34 /* GSTypeEncoding.h */; };
 		18EFCC1F172B0B9A003304CA /* gdnc.m in Sources */ = {isa = PBXBuildFile; fileRef = 1837D9DE1652D0FF00197E53 /* gdnc.m */; };
+		3B422BAE2487F6C50033C395 /* RunLoop相关笔记.md in Resources */ = {isa = PBXBuildFile; fileRef = 3B422BAD2487F6C40033C395 /* RunLoop相关笔记.md */; };
 		9344768124863A4A008EEC3E /* NSNotification相关笔记.md in Resources */ = {isa = PBXBuildFile; fileRef = 9344768024863A4A008EEC3E /* NSNotification相关笔记.md */; };
 		934478A724876758008EEC3E /* CFUUID.h in Headers */ = {isa = PBXBuildFile; fileRef = 9344780024876758008EEC3E /* CFUUID.h */; };
 		934478A824876758008EEC3E /* CFUniCharPriv.h in Headers */ = {isa = PBXBuildFile; fileRef = 9344780124876758008EEC3E /* CFUniCharPriv.h */; };
@@ -1642,6 +1643,7 @@
 		18FE20601628550100389A13 /* ObjCXX.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ObjCXX.mm; sourceTree = "<group>"; };
 		18FE20611628550100389A13 /* TestInfo */ = {isa = PBXFileReference; lastKnownFileType = text; path = TestInfo; sourceTree = "<group>"; };
 		18FE20621628550100389A13 /* Unicode.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Unicode.m; sourceTree = "<group>"; };
+		3B422BAD2487F6C40033C395 /* RunLoop相关笔记.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = "RunLoop相关笔记.md"; sourceTree = "<group>"; };
 		9344768024863A4A008EEC3E /* NSNotification相关笔记.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "NSNotification相关笔记.md"; sourceTree = "<group>"; };
 		9344780024876758008EEC3E /* CFUUID.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CFUUID.h; sourceTree = "<group>"; };
 		9344780124876758008EEC3E /* CFUniCharPriv.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CFUniCharPriv.h; sourceTree = "<group>"; };
@@ -2269,6 +2271,7 @@
 			children = (
 				934477FE24876758008EEC3E /* CF */,
 				9344768024863A4A008EEC3E /* NSNotification相关笔记.md */,
+				3B422BAD2487F6C40033C395 /* RunLoop相关笔记.md */,
 				AD197C15189A51ED000F6CF9 /* GNUmakefile */,
 				AD197C0B189A4E98000F6CF9 /* MISSING */,
 				18906E661610BF3C0003C892 /* Headers */,
@@ -4374,6 +4377,7 @@
 				934478CD24876758008EEC3E /* APPLE_LICENSE in Resources */,
 				934478D524876758008EEC3E /* CFUnicodeData-B.mapping in Resources */,
 				9344790D24876758008EEC3E /* PropertyList.dtd in Resources */,
+				3B422BAE2487F6C50033C395 /* RunLoop相关笔记.md in Resources */,
 				934478E324876758008EEC3E /* MakefileVersion in Resources */,
 				9344793524876758008EEC3E /* MakefileLinux in Resources */,
 				9344790524876758008EEC3E /* CFCharacterSetBitmaps.bitmap in Resources */,
@@ -4755,6 +4759,7 @@
 					"$(SRCROOT)/Headers",
 				);
 				INFOPLIST_FILE = "Support/Foundation/Foundation-Info.plist";
+				LD_GENERATE_MAP_FILE = NO;
 				LIBRARY_SEARCH_PATHS = /opt/local/lib;
 				OTHER_CFLAGS = (
 					"-DGNUSTEP",
@@ -4793,6 +4798,7 @@
 					"$(SRCROOT)/Headers",
 				);
 				INFOPLIST_FILE = "Support/Foundation/Foundation-Info.plist";
+				LD_GENERATE_MAP_FILE = NO;
 				LIBRARY_SEARCH_PATHS = /opt/local/lib;
 				OTHER_CFLAGS = (
 					"-DGNUSTEP",

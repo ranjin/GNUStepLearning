@@ -977,7 +977,7 @@ static NSNotificationCenter *default_center = nil;
 }
 
 /**
- * 如果观察者为nil，其效果是删除指定通知的所有注册表，除非观察者和名称都为nil，在这种情况下不执行任何操作。
+ * 如果观察者为nil，其效果是删除指定通知(name)的所有注册，除非观察者和名称都为nil，在这种情况下不执行任何操作。
  * Deregisters observer for notifications matching name and/or object.  If
  * either or both is nil, they act like wildcards.  The observer may still
  * remain registered for other notifications; use -removeObserver: to remove

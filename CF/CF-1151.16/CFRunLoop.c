@@ -1384,7 +1384,7 @@ CF_EXPORT CFRunLoopRef _CFRunLoopGet0(pthread_t t) {
     __CFLock(&loopsLock);
     if (!__CFRunLoops) {
         __CFUnlock(&loopsLock);
-        
+    //__CFRunLoops是用来保存RunLoop的。
     //第一次进入时，初始化全局Dic，并先为主线程创建一个runloop。
 	CFMutableDictionaryRef dict = CFDictionaryCreateMutable(kCFAllocatorSystemDefault, 0, NULL, &kCFTypeDictionaryValueCallBacks);
         

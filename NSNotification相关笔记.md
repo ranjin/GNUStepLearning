@@ -1,3 +1,4 @@
+https://juejin.im/post/5e5fc16df265da575155723b
 #######  1. 如果在异步线程发送通知，如果保证在主线程响应通知？
 ```
 1. 使用addObserverForName方法注册通知，指定在mainqueue上响应block。
