@@ -42,20 +42,35 @@ extern "C" {
 {
 #if GS_EXPOSE(NSCache)
   @private
+    //所有缓存对象的最大总开销
   /** The maximum total cost of all cache objects. */
   NSUInteger _costLimit;
+    
+    //所有存储对象的总成本
   /** Total cost of currently-stored objects. */
   NSUInteger _totalCost;
+    
+    //缓存中对象的最大数量
   /** The maximum number of objects in the cache. */
   NSUInteger _countLimit;
+    
+    //delegate对象，当对象即将被逐出时通知
   /** The delegate object, notified when objects are about to be evicted. */
   id _delegate;
+    
+    //指示是否应驱逐被丢弃的对象的标志
   /** Flag indicating whether discarded objects should be evicted */
   BOOL _evictsObjectsWithDiscardedContent;
+    
+    //cache名
   /** Name of this cache. */
   NSString *_name;
+    
+    //缓存对象的映射表
   /** The mapping from names to objects in this cache. */
   NSMapTable *_objects;
+    
+    //所有潜在可回收对象的LRU排序
   /** LRU ordering of all potentially-evictable objects in this cache. */
   GS_GENERIC_CLASS(NSMutableArray, ValT) *_accesses;
   /** Total number of accesses to objects */
@@ -165,6 +180,8 @@ extern "C" {
  * Protocol implemented by NSCache delegate objects.
  */
 @protocol NSCacheDelegate
+
+//代理方法，在删除对象之前调用，可能是用户操作的结果，也可能是由于缓存已满。
 /**
  * Delegate method, called just before the cache removes an object, either as
  * the result of user action or due to the cache becoming full.
